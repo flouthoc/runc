@@ -129,3 +129,43 @@ func GetCgroupParamString(path, file string) (string, error) {
 
 	return strings.TrimSpace(contents), nil
 }
+
+// ParseRdmaKV: parse raw string to RdmaEntry.
+func parseRdmaKV(raw string, entry *cgroups.RdmaEntry) {
+	var value uint64
+	var err error
+
+	parts := strings.SplitN(raw, "=", 3)
+	if len(parts) == 2 {
+		if parts[1] == "max" {
+			value = math.MaxUint32
+		} else {
+			value, err = strconv.ParseUint(parts[1], 10, 32)
+			if err != nil {
+				return
+			}
+		}
+		if parts[0] == "hca_handle" {
+			entry.HcaHandles = uint32(value)
+		} else if parts[0] == "hca_object" {
+			entry.HcaObjects = uint32(value)
+		}
+	}
+}
+
+// ConvertRdmaEntry: Converts array of rawstrings to RdmaEntries
+func ConvertRdmaEntry(strEntries []string) []cgroups.RdmaEntry {
+	rdmaEntries := make([]cgroups.RdmaEntry, len(strEntries))
+	for i := range strEntries {
+		parts := strings.SplitN(strEntries[i], " ", 4)
+		if len(parts) == 3 {
+			entry := new(cgroups.RdmaEntry)
+			entry.Device = parts[0]
+			parseRdmaKV(parts[1], entry)
+			parseRdmaKV(parts[2], entry)
+
+			rdmaEntries = append(rdmaEntries, *entry)
+		}
+	}
+	return rdmaEntries
+}
