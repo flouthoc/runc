@@ -1,10 +1,11 @@
 package ebpf
 
 import (
+	"github.com/cilium/ebpf/internal/sys"
 	"github.com/cilium/ebpf/internal/unix"
 )
 
-//go:generate stringer -output types_string.go -type=MapType,ProgramType,AttachType,PinType
+//go:generate stringer -output types_string.go -type=MapType,ProgramType,PinType
 
 // MapType indicates the type map structure
 // that will be initialized in the kernel.
@@ -85,15 +86,20 @@ const (
 	SkStorage
 	// DevMapHash - Hash-based indexing scheme for references to network devices.
 	DevMapHash
-	StructOpts
+	// StructOpsMap - This map holds a kernel struct with its function pointer implemented in a BPF
+	// program.
+	StructOpsMap
+	// RingBuf - Similar to PerfEventArray, but shared across all CPUs.
 	RingBuf
+	// InodeStorage - Specialized local storage map for inodes.
 	InodeStorage
+	// TaskStorage - Specialized local storage map for task_struct.
 	TaskStorage
 )
 
 // hasPerCPUValue returns true if the Map stores a value per CPU.
 func (mt MapType) hasPerCPUValue() bool {
-	return mt == PerCPUHash || mt == PerCPUArray || mt == LRUCPUHash
+	return mt == PerCPUHash || mt == PerCPUArray || mt == LRUCPUHash || mt == PerCPUCGroupStorage
 }
 
 // canStoreMap returns true if the map type accepts a map fd
@@ -144,12 +150,15 @@ const (
 	Extension
 	LSM
 	SkLookup
+	Syscall
 )
 
 // AttachType of the eBPF program, needed to differentiate allowed context accesses in
 // some newer program types like CGroupSockAddr. Should be set to AttachNone if not required.
 // Will cause invalid argument (EINVAL) at program load time if set incorrectly.
 type AttachType uint32
+
+//go:generate stringer -type AttachType -trimprefix Attach
 
 // AttachNone is an alias for AttachCGroupInetIngress for readability reasons.
 const AttachNone AttachType = 0
@@ -193,6 +202,11 @@ const (
 	AttachXDPCPUMap
 	AttachSkLookup
 	AttachXDP
+	AttachSkSKBVerdict
+	AttachSkReuseportSelect
+	AttachSkReuseportSelectOrMigrate
+	AttachPerfEvent
+	AttachTraceKprobeMulti
 )
 
 // AttachFlags of the eBPF program used in BPF_PROG_ATTACH command
@@ -246,3 +260,20 @@ type BatchOptions struct {
 	ElemFlags uint64
 	Flags     uint64
 }
+
+// LogLevel controls the verbosity of the kernel's eBPF program verifier.
+// These constants can be used for the ProgramOptions.LogLevel field.
+type LogLevel = sys.LogLevel
+
+const (
+	// Print verifier state at branch points.
+	LogLevelBranch = sys.BPF_LOG_LEVEL1
+
+	// Print verifier state for every instruction.
+	// Available since Linux v5.2.
+	LogLevelInstruction = sys.BPF_LOG_LEVEL2
+
+	// Print verifier errors and stats at the end of the verification process.
+	// Available since Linux v5.2.
+	LogLevelStats = sys.BPF_LOG_STATS
+)
